@@ -9,24 +9,22 @@ int main()
     sf::RenderWindow window(sf::VideoMode({800, 600}), title);
 
     // Создаем выпуклый многоугольник
-    Polygon polygon{
-            {0.f, 0.f},
-            {0.f, 100.f},
-            {100.f, 100.f},
-            //{100.f, 0.f},
-        };
+    auto trianglePtr = std::make_shared<Object>(1, std::initializer_list<Point>{{0.f, 0.f}, {0.f, 100.f}, {100.f, 100.f}});
+    auto quadPtr = std::make_shared<Object>(2, std::initializer_list<Point>{{0.f, 100.f}, {100.f, 100.f}, {100.f, 0.f}, {0.f, 0.f}});
+    auto quad2Ptr = std::make_shared<Object>(3, std::initializer_list<Point>{{100.f, 200.f}, {200.f, 200.f}, {200.f, 100.f}, {100.f, 100.f}});
 
-    Polygon quad{
-            //{0.f, 0.f},
-            {0.f, 100.f},
-            {100.f, 100.f},
-            {100.f, 0.f},
-        };
+
+
+    std::vector<std::shared_ptr<Object>> objects;
+    objects.push_back(trianglePtr);
+    objects.push_back(quadPtr);
+    objects.push_back(quad2Ptr);
 
     //quad.rotate(sf::degrees(1)); //45/6.28
 
     float speed = 0.01f;
     SeparatingAxisCollider collider;
+    collider.loadObjects({trianglePtr, quadPtr, quad2Ptr});
     sf::Font font{"/home/neko/.config/custom-fonts/visitor-tt2-brk/visitor1.ttf"};
 
     std::atomic<uint64_t> frames = 0;
@@ -45,8 +43,9 @@ int main()
         frames++;
         window.clear();
 
-        polygon.setOutlineColor(Color::Green);
-        quad.setOutlineColor(Color::Green);
+        trianglePtr->setOutlineColor(Color::Green);
+        quadPtr->setOutlineColor(Color::Green);
+        quad2Ptr->setOutlineColor(Color::Green);
 
         while (const auto event = window.pollEvent()) 
         {
@@ -56,26 +55,40 @@ int main()
 
         // Двигаем полигон стрелками
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::A))
-            polygon.move({-speed, 0});
+            trianglePtr->move({-speed, 0});
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::D))
-            polygon.move({speed, 0});
+            trianglePtr->move({speed, 0});
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::W))
-            polygon.move({0, -speed});
+            trianglePtr->move({0, -speed});
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::S))
-            polygon.move({0, speed});
+            trianglePtr->move({0, speed});
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Q))
-            polygon.rotate(sf::degrees(0.1));
+            trianglePtr->rotate(sf::degrees(0.1));
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::E))
-            polygon.rotate(sf::degrees(-0.1));
+            trianglePtr->rotate(sf::degrees(-0.1));
 
 
-        auto position = polygon.getPosition();
-        quad.setPosition({500.f, 500.f});
+        auto position = trianglePtr->getPosition();
+        quadPtr->setPosition({500.f, 500.f});
+        quad2Ptr->setPosition({100.f, 100.f});
 
-        if (collider.isIntersect(polygon, quad)) {
-            polygon.setOutlineColor(Color::Red);
-            quad.setOutlineColor(Color::Red);
+
+        auto intersections = collider.getIntersections();
+        for (const auto& [id, collisions] : intersections) {
+            for (const auto& obj : objects) {
+                if (obj->id == id && !collisions.empty()) {
+                    obj->setOutlineColor(Color::Red);
+                    for (const auto& collision : collisions) {
+                        for (const auto& col : objects) {
+                            if (col->id == collision) {
+                                col->setOutlineColor(Color::Red);
+                            }
+                        }
+                    }
+                }
+            }
         }
+
 
         auto resU = window.getSize();
         Vector res{static_cast<float>(resU.x), static_cast<float>(resU.y)};
@@ -95,10 +108,11 @@ int main()
         window.draw(fpsVal);
         window.draw(resolution);
 
-        window.draw(polygon);
+        window.draw(*trianglePtr);
         window.draw(Circle{position});
 
-        window.draw(quad);
+        window.draw(*quadPtr);
+        window.draw(*quad2Ptr);
         window.display();
     }
 

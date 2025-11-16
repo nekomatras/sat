@@ -1,7 +1,10 @@
+#pragma once
 #include "Basis.hpp"
 #include "Collider.hpp"
 #include <algorithm>
 #include <cmath>
+#include <functional>
+#include <set>
 
 
 
@@ -12,6 +15,8 @@ Separating Axis Theorem для двух выпуклых объектов мож
 а другая - по другую.
 */
 class SeparatingAxisCollider : Collider {
+
+    std::vector<std::shared_ptr<Object>> objectsToCollide;
 
     // Получаем ребра многоугольника
     std::vector<Line> getPolygonSides(const Polygon& polygon) const {
@@ -99,7 +104,6 @@ class SeparatingAxisCollider : Collider {
         return (point.x * vector.x + point.y * vector.y) / vectorAbs;
     }
 
-public:
     bool isIntersect(const Polygon& a, const Polygon& b) {
 
         auto aAxis = getPolygonSidesNormalCoefficients(a);
@@ -121,5 +125,44 @@ public:
         }
 
         return true;
+    }
+
+
+
+public:
+
+    void loadObjects(const std::vector<std::shared_ptr<Object>>& objects) override {
+        objectsToCollide.reserve(objects.size());
+        for (auto obj : objects) {
+            objectsToCollide.push_back(obj);
+        }
+    }
+
+    void loadObject(const std::shared_ptr<Object>& object) override {
+        objectsToCollide.push_back(object);
+    }
+
+    void removeObject(const std::shared_ptr<Object>& object) override {
+        //objectsToCollide.erase(object);
+    }
+
+    std::map<Object::TId, std::vector<Object::TId>> getIntersections() override {
+        auto numberOfObjects = objectsToCollide.size();
+
+        std::map<Object::TId, std::vector<Object::TId>> result;
+
+        for (auto objectIndex = 0; objectIndex < numberOfObjects - 1; objectIndex++) {
+            for (auto collidedObjectIndex = objectIndex + 1; collidedObjectIndex < numberOfObjects; collidedObjectIndex++) {
+
+                const auto& object = *objectsToCollide[objectIndex];
+                const auto& objectToCollide = *objectsToCollide[collidedObjectIndex];
+
+                if (isIntersect(object, objectToCollide)) {
+                    result[object.id].push_back(objectToCollide.id);
+                }
+            }
+        }
+
+        return result;
     }
 };

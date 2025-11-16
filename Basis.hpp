@@ -1,3 +1,4 @@
+#pragma once
 #include <SFML/Graphics.hpp>
 #include <string>
 #include <initializer_list>
@@ -6,7 +7,7 @@
 
 using Color = sf::Color;
 
-inline float EPS = 0.0000000000000001f;
+inline const float EPS = 0.0000000000000001f;
 
 inline float subtractFloat(float a, float b) {
     float result = a - b;
@@ -74,6 +75,20 @@ struct Polygon : sf::ConvexShape {
         // Находим среднее значение для X и Y
         return Point(sumX / pointCount, sumY / pointCount);
     }
+};
+
+
+struct Object : Polygon{
+    using TId = uint64_t;
+
+    TId id;
+
+    Object(uint64_t id, std::initializer_list<Point> points)
+        : id(id), Polygon(points) {}
+
+    bool operator< (Object other) {
+        return id < other.id;
+    };
 };
 
 class Line {
