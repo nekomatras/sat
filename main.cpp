@@ -3,16 +3,26 @@
 #include <initializer_list>
 #include <cmath>
 #include <iostream>
+#include <thread>
 
 typedef sf::Vector2f Point;
 typedef sf::CircleShape Circle;
 typedef sf::Color Color;
 
-std::string toString(Point point) {
-    return "[" + std::to_string(point.x) + ", " + std::to_string(point.y) + "]";
+float EPS = 0.000000000001f;
+
+template <typename T>
+std::string toString(sf::Vector2<T> vector2) {
+    return "[" + std::to_string(vector2.x) + ", " + std::to_string(vector2.y) + "]";
 };
 
-struct VertexLine : sf::VertexArray 
+float subtract(float a, float b) {
+    int result = a - b;
+    //return (result == 0) ? EPS : result;
+    return result;
+}
+
+struct VertexLine : sf::VertexArray
 {
     VertexLine() : sf::VertexArray(sf::PrimitiveType::Lines, 2) {}
 
@@ -158,7 +168,7 @@ Polygon makePolygon(std::initializer_list<Point> points)
 /*
 Separating Axis Theorem для двух выпуклых объектов можно сформулировать так:
 два выпуклых объекта пересекаются тогда и только тогда, когда существует плоскость
-(для двумерного случая - прямая), такая, что одна геометрия лежит по одну ей сторону, 
+(для двумерного случая - прямая), такая, что одна геометрия лежит по одну ей сторону,
 а другая - по другую.
 */
 class Collider {
@@ -184,6 +194,10 @@ class SeparatingAxisCollider : Collider {
                 , c{c}
             {};
 
+            LineCoefficients getNormal(Point pointOnLine) const {
+                return {b, -a, a * pointOnLine.y - b * pointOnLine.x};
+            }
+
             std::string toString() const {
                 return  std::to_string(a) + " * x + " + std::to_string(b) + " * y + " + std::to_string(c) + " = 0";
             }
@@ -199,48 +213,25 @@ class SeparatingAxisCollider : Collider {
             return {coefficients.b, -coefficients.a};
         }
 
-        /* Point getNormalVector() const {
-            auto vector = getVector();
-            return {vector.y, -vector.x};
-        } */
-
         // Получаем коэффициенты уровнения прямой
         LineCoefficients getCoefficients() const {
-
-            //std::cout << toString(start) << " - " << toString(end) << std::endl;
             // (x / (xb - xa)) - (xa / (xb - xa)) = ((y / (yb - ya)) - (ya / (yb - ya)))
             // (x / (xb - xa)) - ((y / (yb - ya)) = - (ya / (yb - ya))) + (xa / (xb - xa))
 
-            float a = 1 / (end.x - start.x);
-            float b = -1 / (end.y - start.y);
-            float c = - (start.y / (end.y - start.y)) + (start.x / (end.x - start.x));
+            float a = 1 / subtract(end.x, start.x);
+            float b = -1 / subtract(end.y, start.y);
+            float c = - (start.y / subtract(end.y, start.y)) + (start.x / subtract(end.x, start.x));
 
             LineCoefficients coef{a, b, c};
-            
-            //std::cout << "Orig: " << coef.toString() << std::endl;
             return coef;
-
-            //Point normalVector = getNormalVector();
-            //return getCoefficients(normalVector);
         }
 
         // Получаем коэффициенты уровнения нормали к прямой
         LineCoefficients getNormalCoefficients() const {
             LineCoefficients line = getCoefficients();
-            return {line.b, -line.a, line.a * start.y - line.b * start.x};
-
-            /* auto vector = getVector();
-            return getCoefficients(vector); */
+            Point mid{(start.x + end.x) / 2, (start.y + end.y) / 2};
+            return line.getNormal(mid);
         }
-
-
-    private:
-        /* LineCoefficients getCoefficients(const Point& vector) const {
-            auto a = vector.x;
-            auto b = vector.y;
-            auto c = -(a * start.x + b * start.y);
-            return {a, b, c};
-        } */
     };
 
     // Получаем ребра многоугольника
@@ -289,7 +280,7 @@ class SeparatingAxisCollider : Collider {
 
     bool isLineIntersected(sf::Vector2f a, sf::Vector2f b) const {
 
-        if (b.y > a.x && b.x < a.y) {
+        if (b.y >= a.x && b.x <= a.y) {
             return true;
         }
 
@@ -303,9 +294,9 @@ class SeparatingAxisCollider : Collider {
         std::vector<float> projections;
         projections.reserve(numberOfPoints);
 
-        for (std::size_t i = 0; i < numberOfPoints - 1; ++i) {
+        for (std::size_t i = 0; i < numberOfPoints; ++i) {
             auto point = polygon.getRealPoint(i);
-            auto pointProjection = getPointProjection(point, axis);
+            auto pointProjection = getPointProjectionMod(point, axis);
             projections.push_back(pointProjection);
         }
 
@@ -315,19 +306,15 @@ class SeparatingAxisCollider : Collider {
         return {x, y};
     }
 
-    /* Line getLineProjection(const Line& line, const Line::LineCoefficients axis) const {
-        return {getPointProjection(line.start, axis), getPointProjection(line.end, axis)};
-    } */
-
-    /* Point getPointProjection(const Point& point, const Line::LineCoefficients axis) const {
+    Point getPointProjectionReal(const Point& point, const Line::LineCoefficients axis) const {
 
         auto xProjection = point.x - (axis.a * ((axis.a * point.x + axis.b * point.y + axis.c) / (axis.a * axis.a + axis.b * axis.b)));
         auto yProjection = point.y - (axis.b * ((axis.a * point.x + axis.b * point.y + axis.c) / (axis.a * axis.a + axis.b * axis.b)));
 
         return {xProjection, yProjection};
-    } */
+    }
 
-    float getPointProjection(const Point& point, const Line::LineCoefficients axis) const {
+    float getPointProjectionMod(const Point& point, const Line::LineCoefficients axis) const {
         sf::Vector2f vector{-axis.b, axis.a};
         auto vectorAbs = std::sqrt(vector.x * vector.x + vector.y * vector.y);
         return (point.x * vector.x + point.y * vector.y) / vectorAbs;
@@ -346,23 +333,8 @@ public:
         std::copy(bAxis.cbegin(), bAxis.cend(), std::back_inserter(axisToCheck));
 
         for (auto axis : axisToCheck) {
-
-            /* std::cout << axis.toString() << std::endl;
-            // axis.a * x + axis.b * y + axis.c;
-            float y0 = 0;
-            auto x0 = (- axis.c - (axis.b * y0)) / axis.a;
-            float y1 = 1000;
-            auto x1 = (- axis.c - (axis.b * y1)) / axis.a;
-            auto ax = VertexLine{{x0, y0}, Color::Magenta, {x1, y1}, Color::Magenta};
-    
-            //std::cout << "[" << x0 << ", " << y0 << "] - [" << x1 << ", " << y1 << "]" << std::endl;
-
-            window.draw(ax); */
-
             auto aProjection = getPolygonProjection(a, axis);
             auto bProjection = getPolygonProjection(b, axis);
-
-            //std::cout << "[" << aProjection.x << ", " << aProjection.y << "] - [" << bProjection.x << ", " << bProjection.y << "]" << std::endl;
 
             if (!isLineIntersected(aProjection, bProjection)) {
                 return false;
@@ -383,32 +355,45 @@ int main()
     // Создаем выпуклый многоугольник
     Polygon polygon = makePolygon(
         {
-            {0.f, 0.f}, 
-            {0.f, 100.f}, 
-            {100.f, 100.f}, 
-            {100.f, 0.f}, 
+            {0.f, 0.f},
+            {0.f, 100.f},
+            {100.f, 100.f},
+            {100.f, 0.f},
         });
 
     Polygon quad = makePolygon(
         {
-            {0.f, 0.f}, 
-            {0.f, 100.f}, 
-            {100.f, 100.f}, 
-            {100.f, 0.f}, 
+            {0.f, 0.f},
+            {0.f, 100.f},
+            {100.f, 100.f},
+            {100.f, 0.f},
         });
 
-    quad.rotate(sf::degrees(30)); //45/6.28
+    quad.rotate(sf::degrees(1)); //45/6.28
 
     float speed = 0.01f;
     SeparatingAxisCollider collider{window};
+    sf::Font font{"/home/neko/.config/custom-fonts/visitor-tt2-brk/visitor1.ttf"};
+
+    std::atomic<uint64_t> frames = 0;
+    std::atomic<uint64_t> fps = 0;
+
+    std::thread fpsMon([&]() {
+        while (window.isOpen()) {
+            fps = frames.load();
+            frames = 0;
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+        }
+    });
 
     while (window.isOpen())
     {
+        frames++;
+        window.clear();
+
         polygon.setOutlineColor(Color::Green);
         quad.setOutlineColor(Color::Green);
 
-        //window.pollEvent();
-        //sf::Event event;
         while (const auto event = window.pollEvent()) 
         {
             if (event.value().is<sf::Event::Closed>())
@@ -429,8 +414,6 @@ int main()
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::E))
             polygon.rotate(sf::degrees(-0.1));
 
-        window.clear();
-
 
         auto position = polygon.getPosition();
         quad.setPosition({500.f, 500.f});
@@ -440,12 +423,30 @@ int main()
             quad.setOutlineColor(Color::Red);
         }
 
+        auto res = window.getSize();
+        uint32_t textSize = 20;
+
+        sf::Text resolution{font, toString(res), textSize};
+        resolution.setFillColor(sf::Color::Green);
+        resolution.setPosition({0.f, 0.f});
+
+        sf::Text fpsVal{font, std::to_string(fps), textSize};
+        fpsVal.setFillColor(sf::Color::Green);
+        fpsVal.setPosition({0.f, static_cast<float>(textSize) / 1.5f});
+
+        //std::this_thread::sleep_for(std::chrono::milliseconds(1));
+
+        window.draw(fpsVal);
+        window.draw(resolution);
+
         window.draw(polygon);
         window.draw(makeCircle(position));
 
         window.draw(quad);
         window.display();
     }
+
+    fpsMon.join();
 
     return 0;
 }
