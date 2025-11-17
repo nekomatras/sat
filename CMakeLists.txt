@@ -13,3 +13,8 @@ add_executable(sat main.cpp)
 
 # Линкуем библиотеки SFML
 target_link_libraries(sat PRIVATE sfml-graphics sfml-window sfml-system)
+
+# Указываем корень как папку для инклюдов
+target_include_directories(sat PRIVATE
+    ${CMAKE_SOURCE_DIR}
+)

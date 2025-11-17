@@ -1,5 +1,6 @@
 #pragma once
-#include "Basis.hpp"
+
+#include "Common/Basis.hpp"
 #include "Collider.hpp"
 #include <algorithm>
 #include <cmath>
@@ -16,7 +17,7 @@ Separating Axis Theorem для двух выпуклых объектов мож
 */
 class SeparatingAxisCollider : Collider {
 
-    std::vector<std::shared_ptr<Object>> objectsToCollide;
+    std::shared_ptr<std::vector<std::shared_ptr<Object>>> objectsToCollide;
 
     // Получаем ребра многоугольника
     std::vector<Line> getPolygonSides(const Polygon& polygon) const {
@@ -131,15 +132,17 @@ class SeparatingAxisCollider : Collider {
 
 public:
 
+    SeparatingAxisCollider(std::shared_ptr<std::vector<std::shared_ptr<Object>>> objects) : objectsToCollide(objects) {}
+
     void loadObjects(const std::vector<std::shared_ptr<Object>>& objects) override {
-        objectsToCollide.reserve(objects.size());
+        /* objectsToCollide.reserve(objects.size());
         for (auto obj : objects) {
             objectsToCollide.push_back(obj);
-        }
+        } */
     }
 
     void loadObject(const std::shared_ptr<Object>& object) override {
-        objectsToCollide.push_back(object);
+        // objectsToCollide.push_back(object);
     }
 
     void removeObject(const std::shared_ptr<Object>& object) override {
@@ -147,18 +150,23 @@ public:
     }
 
     std::map<Object::TId, std::vector<Object::TId>> getIntersections() override {
-        auto numberOfObjects = objectsToCollide.size();
+
+        if (objectsToCollide == nullptr) {
+            return {};
+        }
+
+        auto numberOfObjects = objectsToCollide->size();
 
         std::map<Object::TId, std::vector<Object::TId>> result;
 
         for (auto objectIndex = 0; objectIndex < numberOfObjects - 1; objectIndex++) {
             for (auto collidedObjectIndex = objectIndex + 1; collidedObjectIndex < numberOfObjects; collidedObjectIndex++) {
 
-                const auto& object = *objectsToCollide[objectIndex];
-                const auto& objectToCollide = *objectsToCollide[collidedObjectIndex];
+                const auto& object = (*objectsToCollide)[objectIndex];
+                const auto& objectToCollide = (*objectsToCollide)[collidedObjectIndex];
 
-                if (isIntersect(object, objectToCollide)) {
-                    result[object.id].push_back(objectToCollide.id);
+                if (isIntersect(*object, *objectToCollide)) {
+                    result[object->id].push_back(objectToCollide->id);
                 }
             }
         }

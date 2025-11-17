@@ -1,12 +1,14 @@
 #include <SFML/Graphics.hpp>
 #include <thread>
-#include "SeparatingAxisCollider.hpp"
+#include "Collider/SeparatingAxisCollider.hpp"
+#include "Renderer/SfmlRenderer.hpp"
 
 
 int main()
 {
     const std::string title = "Polygon in SFML";
-    sf::RenderWindow window(sf::VideoMode({800, 600}), title);
+
+    auto window = std::make_shared<sf::RenderWindow>(sf::VideoMode({800, 600}), title);
 
     // Создаем выпуклый многоугольник
     auto trianglePtr = std::make_shared<Object>(1, std::initializer_list<Point>{{0.f, 0.f}, {0.f, 100.f}, {100.f, 100.f}});
@@ -14,43 +16,63 @@ int main()
     auto quad2Ptr = std::make_shared<Object>(3, std::initializer_list<Point>{{100.f, 200.f}, {200.f, 200.f}, {200.f, 100.f}, {100.f, 100.f}});
 
 
-
-    std::vector<std::shared_ptr<Object>> objects;
+    /* std::vector<std::shared_ptr<Object>> objects;
     objects.push_back(trianglePtr);
     objects.push_back(quadPtr);
-    objects.push_back(quad2Ptr);
+    objects.push_back(quad2Ptr); */
 
     //quad.rotate(sf::degrees(1)); //45/6.28
 
     float speed = 0.01f;
-    SeparatingAxisCollider collider;
-    collider.loadObjects({trianglePtr, quadPtr, quad2Ptr});
+
+    auto objectsToCollide = std::make_shared<std::vector<std::shared_ptr<Object>>>();
+    objectsToCollide->push_back(trianglePtr);
+    objectsToCollide->push_back(quadPtr);
+    objectsToCollide->push_back(quad2Ptr);
+
+    auto objectsToDraw = std::make_shared<std::vector<std::shared_ptr<Drawable>>>();
+    objectsToDraw->push_back(trianglePtr);
+    objectsToDraw->push_back(quadPtr);
+    objectsToDraw->push_back(quad2Ptr);
+
+    SeparatingAxisCollider collider{objectsToCollide};
+    SfmlRenderer renderer{objectsToDraw, window};
+
     sf::Font font{"/home/neko/.config/custom-fonts/visitor-tt2-brk/visitor1.ttf"};
+
+    auto resU = window->getSize();
+    Vector res{static_cast<float>(resU.x), static_cast<float>(resU.y)};
+    uint32_t textSize = 20;
+
+    auto resolution = std::make_shared<sf::Text>(font, res.toString(), textSize);
+    objectsToDraw->push_back(resolution);
+
+    auto fpsVal = std::make_shared<sf::Text>(font, std::to_string(0), textSize);
+    objectsToDraw->push_back(fpsVal);
 
     std::atomic<uint64_t> frames = 0;
     std::atomic<uint64_t> fps = 0;
 
     std::thread fpsMon([&]() {
-        while (window.isOpen()) {
+        while (window->isOpen()) {
             fps = frames.load();
             frames = 0;
             std::this_thread::sleep_for(std::chrono::seconds(1));
         }
     });
 
-    while (window.isOpen())
+    while (window->isOpen())
     {
         frames++;
-        window.clear();
 
         trianglePtr->setOutlineColor(Color::Green);
         quadPtr->setOutlineColor(Color::Green);
         quad2Ptr->setOutlineColor(Color::Green);
 
-        while (const auto event = window.pollEvent()) 
+        while (const auto event = window->pollEvent()) 
         {
             if (event.value().is<sf::Event::Closed>())
-                window.close();
+                window->close();
         }
 
         // Двигаем полигон стрелками
@@ -75,11 +97,11 @@ int main()
 
         auto intersections = collider.getIntersections();
         for (const auto& [id, collisions] : intersections) {
-            for (const auto& obj : objects) {
+            for (const auto& obj : *objectsToCollide) {
                 if (obj->id == id && !collisions.empty()) {
                     obj->setOutlineColor(Color::Red);
                     for (const auto& collision : collisions) {
-                        for (const auto& col : objects) {
+                        for (const auto& col : *objectsToCollide) {
                             if (col->id == collision) {
                                 col->setOutlineColor(Color::Red);
                             }
@@ -89,31 +111,17 @@ int main()
             }
         }
 
+        resolution->setFillColor(sf::Color::Green);
+        resolution->setPosition({0.f, 0.f});
+        resolution->setString(res.toString());
 
-        auto resU = window.getSize();
-        Vector res{static_cast<float>(resU.x), static_cast<float>(resU.y)};
-
-        uint32_t textSize = 20;
-
-        sf::Text resolution{font, res.toString(), textSize};
-        resolution.setFillColor(sf::Color::Green);
-        resolution.setPosition({0.f, 0.f});
-
-        sf::Text fpsVal{font, std::to_string(fps), textSize};
-        fpsVal.setFillColor(sf::Color::Green);
-        fpsVal.setPosition({0.f, static_cast<float>(textSize) / 1.5f});
+        fpsVal->setFillColor(sf::Color::Green);
+        fpsVal->setPosition({0.f, 25.f});
+        fpsVal->setString(std::to_string(fps));
 
         //std::this_thread::sleep_for(std::chrono::milliseconds(1));
 
-        window.draw(fpsVal);
-        window.draw(resolution);
-
-        window.draw(*trianglePtr);
-        window.draw(Circle{position});
-
-        window.draw(*quadPtr);
-        window.draw(*quad2Ptr);
-        window.display();
+        renderer.drawObjects();
     }
 
     fpsMon.join();
